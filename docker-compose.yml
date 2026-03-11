@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: stocktracker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: stocktracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - stocktracker-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Market Service
+  market-service:
+    build:
+      context: ./backend/services/market-service
+      dockerfile: Dockerfile
+    container_name: market-service
+    restart: unless-stopped
+    environment:
+      PORT: 3002
+      NODE_ENV: production
+    ports:
+      - "3002:3002"
+    networks:
+      - stocktracker-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Portfolio Service
+  portfolio-service:
+    build:
+      context: ./backend/services/portfolio-service
+      dockerfile: Dockerfile
+    container_name: portfolio-service
+    restart: unless-stopped
+    environment:
+      PORT: 3003
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_DATABASE: stocktracker
+      NODE_ENV: production
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - stocktracker-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./backend/services/api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    restart: unless-stopped
+    environment:
+      PORT: 3001
+      MARKET_SERVICE_URL: http://market-service:3002
+      PORTFOLIO_SERVICE_URL: http://portfolio-service:3003
+      FRONTEND_URL: http://localhost:3000
+      NODE_ENV: production
+    ports:
+      - "3001:3001"
+    depends_on:
+      - market-service
+      - portfolio-service
+    networks:
+      - stocktracker-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+    networks:
+      - stocktracker-network
+
+networks:
+  stocktracker-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
