@@ -8,6 +8,7 @@ resource "aws_ecs_task_definition" "market_service" {
   cpu                      = "256"
   memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  task_role_arn            = aws_iam_role.market_service_task_role.arn
 
   container_definitions = jsonencode([
     {
@@ -79,6 +80,7 @@ resource "aws_ecs_task_definition" "portfolio_service" {
   cpu                      = "256"
   memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  task_role_arn            = aws_iam_role.portfolio_service_task_role.arn
 
   container_definitions = jsonencode([
     {
@@ -113,12 +115,14 @@ resource "aws_ecs_task_definition" "portfolio_service" {
           value = "postgres"
         },
         {
-          name  = "DB_PASSWORD"
-          value = var.db_password
-        },
-        {
           name  = "DB_DATABASE"
           value = "stocktracker"
+        }
+      ]
+      secrets = [
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = aws_secretsmanager_secret.db_password.arn
         }
       ]
       logConfiguration = {
@@ -170,6 +174,7 @@ resource "aws_ecs_task_definition" "api_gateway" {
   cpu                      = "256"
   memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  task_role_arn            = aws_iam_role.api_gateway_task_role.arn
 
   container_definitions = jsonencode([
     {
@@ -261,6 +266,7 @@ resource "aws_ecs_task_definition" "frontend" {
   cpu                      = "256"
   memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  task_role_arn            = aws_iam_role.frontend_task_role.arn
 
   container_definitions = jsonencode([
     {

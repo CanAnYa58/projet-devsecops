@@ -176,10 +176,11 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
    ```
 
 3. **Configure GitHub Secrets:**
-   - `AWS_ACCESS_KEY_ID`
-   - `AWS_SECRET_ACCESS_KEY`
    - `AWS_ACCOUNT_ID`
-   - `AWS_REGION`
+   - `AWS_DEPLOY_ROLE_ARN` (output `github_actions_deploy_role_arn` from Terraform)
+
+4. **Configure GitHub Variables:**
+   - `DAST_TARGET_URL` (optional, URL scanned by OWASP ZAP after deployment)
 
 4. **Push to main branch** to trigger deployment:
    ```bash
@@ -284,10 +285,21 @@ docker-compose logs -f [service-name]
 ## 🔐 Security
 
 - API Gateway handles CORS
-- PostgreSQL credentials stored in environment variables
+- PostgreSQL password is injected from AWS Secrets Manager in ECS
 - AWS Secrets Manager recommended for production
 - VPC isolation for ECS tasks
 - Security groups restrict network access
+
+### DevSecOps Controls
+
+- CI gates on every PR: lint + unit tests
+- SAST: Semgrep
+- Secret scanning: Gitleaks
+- IaC scanning: Checkov
+- Policy-as-code: OPA/Conftest rules for Terraform in [security/opa/terraform.rego](security/opa/terraform.rego)
+- Container image scanning in pipeline: Trivy (HIGH/CRITICAL blocking)
+- Registry hardening: ECR scan-on-push, immutable tags, encryption, lifecycle policies
+- Deployment authentication: GitHub OIDC role assumption (no static AWS keys in CI)
 
 ## 🚦 API Endpoints
 

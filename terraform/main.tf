@@ -45,6 +45,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "github_repository" {
+  description = "GitHub repository in owner/name format"
+  type        = string
+  default     = "CanAnYa58/projet-devsecops"
+}
+
 # VPC
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
@@ -275,13 +281,32 @@ resource "aws_db_instance" "postgres" {
   }
 }
 
+resource "aws_secretsmanager_secret" "db_password" {
+  name        = "${var.app_name}/${var.environment}/db_password"
+  description = "Database password used by portfolio service"
+
+  tags = {
+    Name        = "${var.app_name}-db-password"
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "db_password" {
+  secret_id     = aws_secretsmanager_secret.db_password.id
+  secret_string = var.db_password
+}
+
 # ECR Repositories
 resource "aws_ecr_repository" "api_gateway" {
   name                 = "${var.app_name}/api-gateway"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
   }
 
   tags = {
@@ -292,10 +317,14 @@ resource "aws_ecr_repository" "api_gateway" {
 
 resource "aws_ecr_repository" "market_service" {
   name                 = "${var.app_name}/market-service"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
   }
 
   tags = {
@@ -306,10 +335,14 @@ resource "aws_ecr_repository" "market_service" {
 
 resource "aws_ecr_repository" "portfolio_service" {
   name                 = "${var.app_name}/portfolio-service"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
   }
 
   tags = {
@@ -320,10 +353,14 @@ resource "aws_ecr_repository" "portfolio_service" {
 
 resource "aws_ecr_repository" "frontend" {
   name                 = "${var.app_name}/frontend"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
   }
 
   tags = {
@@ -460,6 +497,293 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role" "market_service_task_role" {
+  name = "${var.app_name}-market-service-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.app_name}-market-service-task-role"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role" "portfolio_service_task_role" {
+  name = "${var.app_name}-portfolio-service-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.app_name}-portfolio-service-task-role"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role" "api_gateway_task_role" {
+  name = "${var.app_name}-api-gateway-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.app_name}-api-gateway-task-role"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role" "frontend_task_role" {
+  name = "${var.app_name}-frontend-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.app_name}-frontend-task-role"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_task_execution_secrets_policy" {
+  name = "${var.app_name}-ecs-task-execution-secrets-policy"
+  role = aws_iam_role.ecs_task_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = aws_secretsmanager_secret.db_password.arn
+      }
+    ]
+  })
+}
+
+resource "aws_ecr_lifecycle_policy" "api_gateway" {
+  repository = aws_ecr_repository.api_gateway.name
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 20 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_ecr_lifecycle_policy" "market_service" {
+  repository = aws_ecr_repository.market_service.name
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 20 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_ecr_lifecycle_policy" "portfolio_service" {
+  repository = aws_ecr_repository.portfolio_service.name
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 20 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_ecr_lifecycle_policy" "frontend" {
+  repository = aws_ecr_repository.frontend.name
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 20 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_openid_connect_provider" "github" {
+  url = "https://token.actions.githubusercontent.com"
+
+  client_id_list = ["sts.amazonaws.com"]
+
+  thumbprint_list = [
+    "6938fd4d98bab03faadb97b34396831e3780aea1"
+  ]
+}
+
+resource "aws_iam_role" "github_actions_deploy_role" {
+  name = "${var.app_name}-github-actions-deploy-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:*"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.app_name}-github-actions-deploy-role"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_deploy_policy" {
+  name = "${var.app_name}-github-actions-deploy-policy"
+  role = aws_iam_role.github_actions_deploy_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:CompleteLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:InitiateLayerUpload",
+          "ecr:PutImage",
+          "ecr:DescribeRepositories",
+          "ecr:ListImages",
+          "ecr:BatchGetImage"
+        ]
+        Resource = [
+          aws_ecr_repository.api_gateway.arn,
+          aws_ecr_repository.market_service.arn,
+          aws_ecr_repository.portfolio_service.arn,
+          aws_ecr_repository.frontend.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeTaskDefinition",
+          "ecs:RegisterTaskDefinition",
+          "ecs:UpdateService",
+          "ecs:DescribeServices",
+          "ecs:DescribeClusters"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole"
+        ]
+        Resource = [
+          aws_iam_role.ecs_task_execution_role.arn,
+          aws_iam_role.market_service_task_role.arn,
+          aws_iam_role.portfolio_service_task_role.arn,
+          aws_iam_role.api_gateway_task_role.arn,
+          aws_iam_role.frontend_task_role.arn
+        ]
+      }
+    ]
+  })
+}
+
 # Data source for availability zones
 data "aws_availability_zones" "available" {
   state = "available"
@@ -499,4 +823,9 @@ output "ecr_frontend_url" {
 output "ecs_cluster_name" {
   description = "ECS Cluster name"
   value       = aws_ecs_cluster.main.name
+}
+
+output "github_actions_deploy_role_arn" {
+  description = "IAM role ARN for GitHub Actions OIDC deployment"
+  value       = aws_iam_role.github_actions_deploy_role.arn
 }

@@ -31,6 +31,9 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.ts ./next.config.ts
 
+RUN chown -R node:node /app
+USER node
+
 # Expose port
 EXPOSE 3000
 

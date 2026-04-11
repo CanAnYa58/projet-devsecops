@@ -29,6 +29,9 @@ RUN npm ci --only=production
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
+RUN chown -R node:node /app
+USER node
+
 # Expose port
 EXPOSE 3002
 

@@ -1,113 +1,242 @@
-name: Deploy to AWS ECS
+name: DevSecOps Pipeline AWS ECS
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  security-events: write
+
 env:
   AWS_REGION: us-east-1
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
   ECS_CLUSTER: stocktracker-cluster
+  IMAGE_TAG: ${{ github.sha }}
+  DAST_TARGET_URL: ${{ vars.DAST_TARGET_URL }}
 
 jobs:
-  build-and-deploy:
+  ci-security:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install API Gateway dependencies
+        working-directory: backend/services/api-gateway
+        run: npm ci
+
+      - name: Install Market Service dependencies
+        working-directory: backend/services/market-service
+        run: npm ci
+
+      - name: Install Portfolio Service dependencies
+        working-directory: backend/services/portfolio-service
+        run: npm ci
+
+      - name: Install Frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint API Gateway
+        working-directory: backend/services/api-gateway
+        run: npm run lint -- --max-warnings=0
+
+      - name: Lint Market Service
+        working-directory: backend/services/market-service
+        run: npm run lint -- --max-warnings=0
+
+      - name: Lint Portfolio Service
+        working-directory: backend/services/portfolio-service
+        run: npm run lint -- --max-warnings=0
+
+      - name: Lint Frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit tests API Gateway
+        working-directory: backend/services/api-gateway
+        run: npm test -- --ci --runInBand --passWithNoTests
+
+      - name: Unit tests Market Service
+        working-directory: backend/services/market-service
+        run: npm test -- --ci --runInBand --passWithNoTests
+
+      - name: Unit tests Portfolio Service
+        working-directory: backend/services/portfolio-service
+        run: npm test -- --ci --runInBand --passWithNoTests
+
+      - name: Secret scanning (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: SAST (Semgrep)
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/security-audit
+
+      - name: IaC security scan (Checkov)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          quiet: true
+          framework: terraform
+
+      - name: Install Conftest
+        run: |
+          wget https://github.com/open-policy-agent/conftest/releases/download/v0.59.0/conftest_0.59.0_Linux_x86_64.tar.gz -O conftest.tar.gz
+          tar -xzf conftest.tar.gz
+          sudo mv conftest /usr/local/bin/conftest
+
+      - name: OPA policy checks (Conftest)
+        run: conftest test --policy security/opa terraform/*.tf --parser hcl2
+
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    needs: ci-security
+    if: github.event_name != 'pull_request'
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push Market Service image
-        env:
-          ECR_REPOSITORY: stocktracker/market-service
-          IMAGE_TAG: ${{ github.sha }}
+      - name: Build all images
         run: |
-          cd services/market-service
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker build -t $ECR_REGISTRY/stocktracker/market-service:$IMAGE_TAG backend/services/market-service
+          docker build -t $ECR_REGISTRY/stocktracker/portfolio-service:$IMAGE_TAG backend/services/portfolio-service
+          docker build -t $ECR_REGISTRY/stocktracker/api-gateway:$IMAGE_TAG backend/services/api-gateway
+          docker build -t $ECR_REGISTRY/stocktracker/frontend:$IMAGE_TAG frontend
 
-      - name: Build, tag, and push Portfolio Service image
-        env:
-          ECR_REPOSITORY: stocktracker/portfolio-service
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          cd services/portfolio-service
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+      - name: Scan Market Service image (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ env.ECR_REGISTRY }}/stocktracker/market-service:${{ env.IMAGE_TAG }}
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          exit-code: 1
 
-      - name: Build, tag, and push API Gateway image
-        env:
-          ECR_REPOSITORY: stocktracker/api-gateway
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          cd services/api-gateway
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+      - name: Scan Portfolio Service image (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ env.ECR_REGISTRY }}/stocktracker/portfolio-service:${{ env.IMAGE_TAG }}
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          exit-code: 1
 
-      - name: Build, tag, and push Frontend image
-        env:
-          ECR_REPOSITORY: stocktracker/frontend
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+      - name: Scan API Gateway image (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ env.ECR_REGISTRY }}/stocktracker/api-gateway:${{ env.IMAGE_TAG }}
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          exit-code: 1
 
-      - name: Update Market Service
-        run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service stocktracker-market-service \
-            --force-new-deployment \
-            --region ${{ env.AWS_REGION }}
+      - name: Scan Frontend image (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ env.ECR_REGISTRY }}/stocktracker/frontend:${{ env.IMAGE_TAG }}
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          exit-code: 1
 
-      - name: Update Portfolio Service
+      - name: Push images to ECR
         run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service stocktracker-portfolio-service \
-            --force-new-deployment \
-            --region ${{ env.AWS_REGION }}
+          docker push $ECR_REGISTRY/stocktracker/market-service:$IMAGE_TAG
+          docker push $ECR_REGISTRY/stocktracker/portfolio-service:$IMAGE_TAG
+          docker push $ECR_REGISTRY/stocktracker/api-gateway:$IMAGE_TAG
+          docker push $ECR_REGISTRY/stocktracker/frontend:$IMAGE_TAG
 
-      - name: Update API Gateway
+      - name: Deploy Market Service
         run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service stocktracker-api-gateway \
-            --force-new-deployment \
-            --region ${{ env.AWS_REGION }}
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition stocktracker-market-service --query taskDefinition)
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$ECR_REGISTRY/stocktracker/market-service:$IMAGE_TAG" \
+            --arg NAME "market-service" \
+            'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
+             .containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end)')
+          TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster $ECS_CLUSTER --service stocktracker-market-service --task-definition "$TASK_ARN"
 
-      - name: Update Frontend
+      - name: Deploy Portfolio Service
         run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service stocktracker-frontend \
-            --force-new-deployment \
-            --region ${{ env.AWS_REGION }}
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition stocktracker-portfolio-service --query taskDefinition)
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$ECR_REGISTRY/stocktracker/portfolio-service:$IMAGE_TAG" \
+            --arg NAME "portfolio-service" \
+            'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
+             .containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end)')
+          TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster $ECS_CLUSTER --service stocktracker-portfolio-service --task-definition "$TASK_ARN"
+
+      - name: Deploy API Gateway
+        run: |
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition stocktracker-api-gateway --query taskDefinition)
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$ECR_REGISTRY/stocktracker/api-gateway:$IMAGE_TAG" \
+            --arg NAME "api-gateway" \
+            'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
+             .containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end)')
+          TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster $ECS_CLUSTER --service stocktracker-api-gateway --task-definition "$TASK_ARN"
+
+      - name: Deploy Frontend
+        run: |
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition stocktracker-frontend --query taskDefinition)
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$ECR_REGISTRY/stocktracker/frontend:$IMAGE_TAG" \
+            --arg NAME "frontend" \
+            'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
+             .containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end)')
+          TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster $ECS_CLUSTER --service stocktracker-frontend --task-definition "$TASK_ARN"
 
       - name: Wait for services to stabilize
         run: |
           aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services stocktracker-market-service stocktracker-portfolio-service stocktracker-api-gateway stocktracker-frontend \
-            --region ${{ env.AWS_REGION }}
+            --cluster $ECS_CLUSTER \
+            --services stocktracker-market-service stocktracker-portfolio-service stocktracker-api-gateway stocktracker-frontend
+
+  dast:
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: github.event_name != 'pull_request' && vars.DAST_TARGET_URL != ''
+
+    steps:
+      - name: DAST scan (OWASP ZAP baseline)
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ env.DAST_TARGET_URL }}
+          fail_action: true
