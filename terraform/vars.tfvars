@@ -1,5 +1,5 @@
 aws_region        = "us-east-1"
 environment       = "production"
-app_name          = "stocktracker"
+app_name          = "les-ptits-boursiers"
 github_repository = "CanAnYa58/projet-devsecops"
 db_password       = "ouais"

@@ -120,7 +120,7 @@ docker-compose -f docker-compose.dev.yml up
 
 1. **Install PostgreSQL** and create database:
    ```sql
-   CREATE DATABASE stocktracker;
+   CREATE DATABASE les_ptits_boursiers;
    ```
 
 2. **Setup each service:**
@@ -247,7 +247,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
-DB_DATABASE=stocktracker
+DB_DATABASE=les_ptits_boursiers
 NODE_ENV=development
 ```
 
@@ -272,10 +272,10 @@ npm test
 ## 📊 Monitoring
 
 ### CloudWatch Logs (AWS)
-- `/ecs/stocktracker/api-gateway`
-- `/ecs/stocktracker/market-service`
-- `/ecs/stocktracker/portfolio-service`
-- `/ecs/stocktracker/frontend`
+ - `/ecs/les-ptits-boursiers/api-gateway`
+ - `/ecs/les-ptits-boursiers/market-service`
+ - `/ecs/les-ptits-boursiers/portfolio-service`
+ - `/ecs/les-ptits-boursiers/frontend`
 
 ### Local Logs
 ```bash

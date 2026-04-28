@@ -4,18 +4,18 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: stocktracker-db
+    container_name: les-ptits-boursiers-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: stocktracker
+      POSTGRES_DB: les_ptits_boursiers
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - stocktracker-network
+      - les-ptits-boursiers-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -35,7 +35,7 @@ services:
     ports:
       - "3002:3002"
     networks:
-      - stocktracker-network
+      - les-ptits-boursiers-network
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002"]
       interval: 30s
@@ -55,7 +55,7 @@ services:
       DB_PORT: 5432
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
-      DB_DATABASE: stocktracker
+      DB_DATABASE: les_ptits_boursiers
       NODE_ENV: production
     ports:
       - "3003:3003"
@@ -63,7 +63,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - stocktracker-network
+      - les-ptits-boursiers-network
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003"]
       interval: 30s
@@ -89,7 +89,7 @@ services:
       - market-service
       - portfolio-service
     networks:
-      - stocktracker-network
+      - les-ptits-boursiers-network
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
       interval: 30s
@@ -111,10 +111,10 @@ services:
     depends_on:
       - api-gateway
     networks:
-      - stocktracker-network
+      - les-ptits-boursiers-network
 
 networks:
-  stocktracker-network:
+  les-ptits-boursiers-network:
     driver: bridge
 
 volumes:

@@ -16,7 +16,7 @@ permissions:
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
-  ECS_CLUSTER: stocktracker-cluster
+  ECS_CLUSTER: les-ptits-boursiers-cluster
   IMAGE_TAG: ${{ github.sha }}
   DAST_TARGET_URL: ${{ vars.DAST_TARGET_URL }}
 
@@ -154,16 +154,16 @@ jobs:
 
       - name: Build all images
         run: |
-          docker build -t $ECR_REGISTRY/stocktracker/market-service:$IMAGE_TAG backend/services/market-service
-          docker build -t $ECR_REGISTRY/stocktracker/portfolio-service:$IMAGE_TAG backend/services/portfolio-service
-          docker build -t $ECR_REGISTRY/stocktracker/api-gateway:$IMAGE_TAG backend/services/api-gateway
-          docker build -t $ECR_REGISTRY/stocktracker/frontend:$IMAGE_TAG frontend
+          docker build -t $ECR_REGISTRY/les-ptits-boursiers/market-service:$IMAGE_TAG backend/services/market-service
+          docker build -t $ECR_REGISTRY/les-ptits-boursiers/portfolio-service:$IMAGE_TAG backend/services/portfolio-service
+          docker build -t $ECR_REGISTRY/les-ptits-boursiers/api-gateway:$IMAGE_TAG backend/services/api-gateway
+          docker build -t $ECR_REGISTRY/les-ptits-boursiers/frontend:$IMAGE_TAG frontend
 
       - name: Scan Market Service image (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
-          image-ref: ${{ env.ECR_REGISTRY }}/stocktracker/market-service:${{ env.IMAGE_TAG }}
+          image-ref: ${{ env.ECR_REGISTRY }}/les-ptits-boursiers/market-service:${{ env.IMAGE_TAG }}
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
@@ -173,7 +173,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
-          image-ref: ${{ env.ECR_REGISTRY }}/stocktracker/portfolio-service:${{ env.IMAGE_TAG }}
+          image-ref: ${{ env.ECR_REGISTRY }}/les-ptits-boursiers/portfolio-service:${{ env.IMAGE_TAG }}
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
@@ -183,7 +183,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
-          image-ref: ${{ env.ECR_REGISTRY }}/stocktracker/api-gateway:${{ env.IMAGE_TAG }}
+          image-ref: ${{ env.ECR_REGISTRY }}/les-ptits-boursiers/api-gateway:${{ env.IMAGE_TAG }}
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
@@ -193,7 +193,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
-          image-ref: ${{ env.ECR_REGISTRY }}/stocktracker/frontend:${{ env.IMAGE_TAG }}
+          image-ref: ${{ env.ECR_REGISTRY }}/les-ptits-boursiers/frontend:${{ env.IMAGE_TAG }}
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
@@ -201,60 +201,60 @@ jobs:
 
       - name: Push images to ECR
         run: |
-          docker push $ECR_REGISTRY/stocktracker/market-service:$IMAGE_TAG
-          docker push $ECR_REGISTRY/stocktracker/portfolio-service:$IMAGE_TAG
-          docker push $ECR_REGISTRY/stocktracker/api-gateway:$IMAGE_TAG
-          docker push $ECR_REGISTRY/stocktracker/frontend:$IMAGE_TAG
+          docker push $ECR_REGISTRY/les-ptits-boursiers/market-service:$IMAGE_TAG
+          docker push $ECR_REGISTRY/les-ptits-boursiers/portfolio-service:$IMAGE_TAG
+          docker push $ECR_REGISTRY/les-ptits-boursiers/api-gateway:$IMAGE_TAG
+          docker push $ECR_REGISTRY/les-ptits-boursiers/frontend:$IMAGE_TAG
 
       - name: Deploy Market Service
         run: |
-          TASK_DEF=$(aws ecs describe-task-definition --task-definition stocktracker-market-service --query taskDefinition)
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition les-ptits-boursiers-market-service --query taskDefinition)
           NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
-            --arg IMAGE "$ECR_REGISTRY/stocktracker/market-service:$IMAGE_TAG" \
+            --arg IMAGE "$ECR_REGISTRY/les-ptits-boursiers/market-service:$IMAGE_TAG" \
             --arg NAME "market-service" \
             'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
              .containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end)')
           TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
-          aws ecs update-service --cluster $ECS_CLUSTER --service stocktracker-market-service --task-definition "$TASK_ARN"
+          aws ecs update-service --cluster $ECS_CLUSTER --service les-ptits-boursiers-market-service --task-definition "$TASK_ARN"
 
       - name: Deploy Portfolio Service
         run: |
-          TASK_DEF=$(aws ecs describe-task-definition --task-definition stocktracker-portfolio-service --query taskDefinition)
+          TASK_DEF=$(aws ecs.describe-task-definition --task-definition les-ptits-boursiers-portfolio-service --query taskDefinition)
           NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
-            --arg IMAGE "$ECR_REGISTRY/stocktracker/portfolio-service:$IMAGE_TAG" \
+            --arg IMAGE "$ECR_REGISTRY/les-ptits-boursiers/portfolio-service:$IMAGE_TAG" \
             --arg NAME "portfolio-service" \
             'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
              .containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end)')
           TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
-          aws ecs update-service --cluster $ECS_CLUSTER --service stocktracker-portfolio-service --task-definition "$TASK_ARN"
+          aws ecs update-service --cluster $ECS_CLUSTER --service les-ptits-boursiers-portfolio-service --task-definition "$TASK_ARN"
 
       - name: Deploy API Gateway
         run: |
-          TASK_DEF=$(aws ecs describe-task-definition --task-definition stocktracker-api-gateway --query taskDefinition)
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition les-ptits-boursiers-api-gateway --query taskDefinition)
           NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
-            --arg IMAGE "$ECR_REGISTRY/stocktracker/api-gateway:$IMAGE_TAG" \
+            --arg IMAGE "$ECR_REGISTRY/les-ptits-boursiers/api-gateway:$IMAGE_TAG" \
             --arg NAME "api-gateway" \
             'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
              .containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end)')
           TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
-          aws ecs update-service --cluster $ECS_CLUSTER --service stocktracker-api-gateway --task-definition "$TASK_ARN"
+          aws ecs update-service --cluster $ECS_CLUSTER --service les-ptits-boursiers-api-gateway --task-definition "$TASK_ARN"
 
       - name: Deploy Frontend
         run: |
-          TASK_DEF=$(aws ecs describe-task-definition --task-definition stocktracker-frontend --query taskDefinition)
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition les-ptits-boursiers-frontend --query taskDefinition)
           NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
-            --arg IMAGE "$ECR_REGISTRY/stocktracker/frontend:$IMAGE_TAG" \
+            --arg IMAGE "$ECR_REGISTRY/les-ptits-boursiers/frontend:$IMAGE_TAG" \
             --arg NAME "frontend" \
             'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
              .containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end)')
           TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
-          aws ecs update-service --cluster $ECS_CLUSTER --service stocktracker-frontend --task-definition "$TASK_ARN"
+          aws ecs update-service --cluster $ECS_CLUSTER --service les-ptits-boursiers-frontend --task-definition "$TASK_ARN"
 
       - name: Wait for services to stabilize
         run: |
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
-            --services stocktracker-market-service stocktracker-portfolio-service stocktracker-api-gateway stocktracker-frontend
+            --services les-ptits-boursiers-market-service les-ptits-boursiers-portfolio-service les-ptits-boursiers-api-gateway les-ptits-boursiers-frontend
 
   dast:
     runs-on: ubuntu-latest

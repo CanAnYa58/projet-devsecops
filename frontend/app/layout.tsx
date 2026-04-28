@@ -3,7 +3,7 @@ import "./globals.css";
 import Navigation from "@/components/Navigation";
 
 export const metadata: Metadata = {
-  title: "StockTracker - Suivi Boursier",
+  title: "les ptits boursiers - Suivi Boursier",
   description:
     "Suivez les marchés financiers mondiaux, gérez votre portefeuille et vos favoris",
 };

@@ -4,17 +4,17 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: stocktracker-db-dev
+    container_name: les-ptits-boursiers-db-dev
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: stocktracker
+      POSTGRES_DB: les_ptits_boursiers
     ports:
       - "5432:5432"
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data
     networks:
-      - stocktracker-network
+      - les-ptits-boursiers-network
 
   # Market Service (Development mode with hot reload)
   market-service:
@@ -33,7 +33,7 @@ services:
       - /app/node_modules
     command: npm run start:dev
     networks:
-      - stocktracker-network
+      - les-ptits-boursiers-network
 
   # Portfolio Service (Development mode with hot reload)
   portfolio-service:
@@ -48,7 +48,7 @@ services:
       DB_PORT: 5432
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
-      DB_DATABASE: stocktracker
+      DB_DATABASE: les_ptits_boursiers
       NODE_ENV: development
     ports:
       - "3003:3003"
@@ -59,7 +59,7 @@ services:
     depends_on:
       - postgres
     networks:
-      - stocktracker-network
+      - les-ptits-boursiers-network
 
   # API Gateway (Development mode with hot reload)
   api-gateway:
@@ -84,10 +84,10 @@ services:
       - market-service
       - portfolio-service
     networks:
-      - stocktracker-network
+      - les-ptits-boursiers-network
 
 networks:
-  stocktracker-network:
+  les-ptits-boursiers-network:
     driver: bridge
 
 volumes:

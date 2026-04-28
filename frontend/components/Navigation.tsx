@@ -23,7 +23,7 @@ export default function Navigation() {
             <BarChart2 className="w-5 h-5 text-accent-green" />
           </div>
           <span className="font-semibold text-white hidden sm:block">
-            StockTracker
+            les ptits boursiers
           </span>
         </Link>
 

@@ -116,7 +116,7 @@ resource "aws_ecs_task_definition" "portfolio_service" {
         },
         {
           name  = "DB_DATABASE"
-          value = "stocktracker"
+          value = "les_ptits_boursiers"
         }
       ]
       secrets = [

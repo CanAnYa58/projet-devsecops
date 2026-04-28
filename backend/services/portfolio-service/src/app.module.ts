@@ -15,7 +15,7 @@ import { PortfolioHolding } from './entities/portfolio-holding.entity';
       port: parseInt(process.env.DB_PORT) || 5432,
       username: process.env.DB_USERNAME || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_DATABASE || 'stocktracker',
+      database: process.env.DB_DATABASE || 'les_ptits_boursiers',
       entities: [Favorite, PortfolioHolding],
       synchronize: process.env.NODE_ENV !== 'production', // Disable in production
     }),

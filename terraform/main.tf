@@ -11,7 +11,7 @@ terraform {
   backend "s3" {
     # Configure your S3 backend here
     # bucket = "your-terraform-state-bucket"
-    # key    = "stocktracker/terraform.tfstate"
+    # key    = "les-ptits-boursiers/terraform.tfstate"
     # region = "us-east-1"
   }
 }
@@ -36,7 +36,7 @@ variable "environment" {
 variable "app_name" {
   description = "Application name"
   type        = string
-  default     = "stocktracker"
+  default     = "les-ptits-boursiers"
 }
 
 variable "db_password" {
@@ -267,7 +267,10 @@ resource "aws_db_instance" "postgres" {
   instance_class         = "db.t3.micro"
   allocated_storage      = 20
   storage_type           = "gp3"
-  db_name                = "stocktracker"
+  # use underscore for Postgres DB name
+  # db_name should be a valid identifier
+  # overriding to use underscores
+  db_name                = "les_ptits_boursiers"
   username               = "postgres"
   password               = var.db_password
   db_subnet_group_name   = aws_db_subnet_group.main.name
