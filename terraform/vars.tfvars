@@ -1,0 +1,5 @@
+aws_region        = "us-east-1"
+environment       = "production"
+app_name          = "stocktracker"
+github_repository = "CanAnYa58/projet-devsecops"
+db_password       = "ouais"
