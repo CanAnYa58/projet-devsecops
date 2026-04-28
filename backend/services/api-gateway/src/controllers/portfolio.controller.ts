@@ -2,6 +2,10 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 
+interface PortfolioHoldingPayload {
+  [key: string]: unknown;
+}
+
 @Controller('api')
 export class PortfolioController {
   private readonly portfolioServiceUrl: string;
@@ -51,7 +55,7 @@ export class PortfolioController {
   }
 
   @Post('portfolio')
-  async addHolding(@Body() body: any) {
+  async addHolding(@Body() body: PortfolioHoldingPayload) {
     const response = await firstValueFrom(
       this.httpService.post(`${this.portfolioServiceUrl}/portfolio`, body)
     );
@@ -59,7 +63,7 @@ export class PortfolioController {
   }
 
   @Put('portfolio/:id')
-  async updateHolding(@Param('id') id: string, @Body() body: any) {
+  async updateHolding(@Param('id') id: string, @Body() body: PortfolioHoldingPayload) {
     const response = await firstValueFrom(
       this.httpService.put(`${this.portfolioServiceUrl}/portfolio/${id}`, body)
     );

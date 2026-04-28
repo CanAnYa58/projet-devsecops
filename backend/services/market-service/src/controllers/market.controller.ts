@@ -1,5 +1,11 @@
 import { Controller, Get, Query, Param } from '@nestjs/common';
-import { YahooFinanceService } from '../services/yahoo-finance.service';
+import {
+  YahooFinanceService,
+  type YahooHistoricalOptions,
+  type YahooQuoteResult,
+  type YahooSearchQuoteResult,
+  type YahooSearchResult,
+} from '../services/yahoo-finance.service';
 
 interface StockQuote {
   symbol: string;
@@ -20,6 +26,10 @@ interface StockQuote {
   trailingPE?: number;
   dividendYield?: number;
   epsTrailingTwelveMonths?: number;
+}
+
+function isStockQuote(value: StockQuote | null): value is StockQuote {
+  return value !== null;
 }
 
 @Controller()
@@ -70,7 +80,7 @@ export class MarketController {
         quote: idx,
       }));
 
-      const stocks = stocksRaw.filter(Boolean);
+      const stocks = stocksRaw.filter(isStockQuote);
 
       // Sort stocks by changePercent to get gainers and losers
       const sortedByChange = [...stocks].sort((a, b) => b.changePercent - a.changePercent);
@@ -99,7 +109,7 @@ export class MarketController {
     const symbols = symbolsParam.split(',').map((s) => s.trim()).filter(Boolean);
 
     try {
-      const results: PromiseSettledResult<any>[] = await Promise.allSettled(
+      const results: PromiseSettledResult<YahooQuoteResult>[] = await Promise.allSettled(
         symbols.map((symbol) =>
           this.yahooFinanceService.quote(symbol, {
             fields: [
@@ -139,7 +149,7 @@ export class MarketController {
             epsTrailingTwelveMonths: q.epsTrailingTwelveMonths,
           };
         })
-        .filter(Boolean);
+        .filter(isStockQuote);
 
       return quotes;
     } catch (error) {
@@ -155,14 +165,14 @@ export class MarketController {
     }
 
     try {
-      const result: any = await this.yahooFinanceService.search(query, {
+      const result: YahooSearchResult = await this.yahooFinanceService.search(query, {
         newsCount: 0,
         quotesCount: 8,
       });
 
-      const quotes = ((result.quotes ?? []) as any[])
+      const quotes = (result.quotes ?? [])
         .filter(
-          (q) =>
+          (q: YahooSearchQuoteResult) =>
             q.quoteType === 'EQUITY' ||
             q.quoteType === 'ETF' ||
             q.quoteType === 'INDEX' ||
@@ -215,7 +225,7 @@ export class MarketController {
         throw new Error('Invalid date parameters');
       }
 
-      const options: any = {
+      const options: YahooHistoricalOptions = {
         period1: startDate,
         period2: endDate,
         interval: interval || '1d', // Default to daily data
@@ -258,7 +268,7 @@ export class MarketController {
 
   private async fetchQuote(symbol: string, fallbackName?: string): Promise<StockQuote | null> {
     try {
-      const q: any = await this.yahooFinanceService.quote(symbol);
+      const q: YahooQuoteResult = await this.yahooFinanceService.quote(symbol);
       return {
         symbol: q.symbol ?? symbol,
         name: q.longName || q.shortName || fallbackName || q.symbol || symbol,
