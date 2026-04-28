@@ -43,8 +43,9 @@ export default function StockDetailPage({
   const positive = (quote?.changePercent ?? 0) >= 0;
 
   useEffect(() => {
-    setLoading(true);
-    setError(false);
+    // avoid calling setState synchronously in the effect
+    Promise.resolve().then(() => setLoading(true));
+    Promise.resolve().then(() => setError(false));
     api.fetchQuote([decodedSymbol])
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
@@ -54,7 +55,7 @@ export default function StockDetailPage({
         }
       })
       .catch(() => setError(true))
-      .finally(() => setLoading(false));
+        .finally(() => setLoading(false));
   }, [decodedSymbol]);
 
   if (loading) {

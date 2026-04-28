@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { TooltipProps } from "recharts";
 import {
   AreaChart,
   Area,
@@ -26,21 +27,13 @@ const PERIOD_LABELS: Record<Period, string> = {
   "5Y": "5A",
 };
 
-interface TooltipData {
-  active?: boolean;
-  payload?: Array<{ value?: number }>;
-  label?: string;
-  currency: string;
-}
+type RechartsTooltipProps = TooltipProps<number, string>;
 
-function CustomTooltip({
-  active,
-  payload,
-  label,
-  currency,
-}: TooltipData) {
-  if (!active || !payload?.length) return null;
-  const val = payload[0]?.value ?? 0;
+function CustomTooltip(props: RechartsTooltipProps & { currency: string }) {
+  const { active, payload, label, currency } = props;
+  if (!active || !payload || payload.length === 0) return null;
+  const first = payload[0] as { value?: number } | undefined;
+  const val = first?.value ?? 0;
   return (
     <div className="bg-bg-hover border border-bg-border rounded-lg px-3 py-2 shadow-xl">
       <div className="text-xs text-slate-400 mb-1">{label}</div>
@@ -115,10 +108,11 @@ export default function StockChart({
       
       // Transform the data to ensure we have the 'time' field
       // Backend may return 'date' instead of 'time'
-      const transformedData = Array.isArray(d) 
-        ? d.map((item: any) => {
-            const dateValue = item.time || item.date;
-            const dateObj = new Date(dateValue);
+      const transformedData = Array.isArray(d)
+        ? d.map((item: unknown) => {
+            const rec = item as Record<string, unknown>;
+            const dateValue = (rec.time ?? rec.date) as string | undefined;
+            const dateObj = new Date(dateValue ?? Date.now());
             
             // Format based on period
             let formattedTime: string;
@@ -139,11 +133,21 @@ export default function StockChart({
               });
             }
             
+            const priceVal = (() => {
+              const p = rec.price ?? rec.close;
+              if (typeof p === "number") return p;
+              if (typeof p === "string") return Number(p) || 0;
+              return 0;
+            })();
+
             return {
-              ...item,
               time: formattedTime,
-              price: item.price || item.close || 0,
-            };
+              price: priceVal,
+              open: typeof rec.open === "number" ? rec.open : undefined,
+              high: typeof rec.high === "number" ? rec.high : undefined,
+              low: typeof rec.low === "number" ? rec.low : undefined,
+              volume: typeof rec.volume === "number" ? rec.volume : undefined,
+            } as ChartPoint;
           })
         : [];
       

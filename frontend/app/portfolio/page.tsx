@@ -49,10 +49,12 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     if (portfolio.length === 0) {
-      setHoldings([]);
+      // avoid calling setState synchronously inside the effect
+      Promise.resolve().then(() => setHoldings([]));
       return;
     }
-    setLoading(true);
+    // schedule to avoid synchronous setState in effect body
+    Promise.resolve().then(() => setLoading(true));
     const symbols = [...new Set(portfolio.map((h) => h.symbol))];
     api.fetchQuote(symbols)
       .then((quotes) => {
